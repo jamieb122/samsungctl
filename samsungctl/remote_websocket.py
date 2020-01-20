@@ -3,12 +3,16 @@ import json
 import logging
 import socket
 import time
+import struct
+import wakeonlan
 
 from . import exceptions
+from . import utils
 
 
-URL_FORMAT = "ws://{}:{}/api/v2/channels/samsung.remote.control?name={}"
 
+
+URL_FORMAT = "ws://{}:{}/api/v2/channels/samsung.remote.control?name={}&id={}&mac={}&ip={}"
 
 class RemoteWebsocket():
     """Object for remote control connection."""
@@ -23,10 +27,15 @@ class RemoteWebsocket():
             config["timeout"] = None
 
         url = URL_FORMAT.format(config["host"], config["port"],
-                                self._serialize_string(config["name"]))
+                                self._serialize_string(config["name"]), self._serialize_string(config["mac"]), 
+                                self._serialize_string(config["mac"]), self._serialize_string(config["ip"]))
+        print("URL: %s" % (url,))
+        self.config = config
 
+        if utils.check_ping(config["host"]) == False:
+            logging.debug("Host not up")
+            config["timeout"] = 2
         self.connection = websocket.create_connection(url, config["timeout"])
-
         self._read_response()
 
     def __enter__(self):
@@ -47,6 +56,13 @@ class RemoteWebsocket():
         if not self.connection:
             raise exceptions.ConnectionClosed()
 
+        elif key =="KEY_POWEROFF":
+            if utils.check_ping(self.config["host"]) == True:
+                print("TV Alive, turning off")
+                key = "KEY_POWER"
+            else:
+                return
+
         payload = json.dumps({
             "method": "ms.remote.control",
             "params": {
@@ -66,6 +82,8 @@ class RemoteWebsocket():
     def _read_response(self):
         response = self.connection.recv()
         response = json.loads(response)
+
+        #print("Response: %s" % (response,))
 
         if response["event"] != "ms.channel.connect":
             self.close()

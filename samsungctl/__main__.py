@@ -5,13 +5,14 @@ import logging
 import os
 import socket
 import errno
+import wakeonlan
 
 from . import __doc__ as doc
 from . import __title__ as title
 from . import __version__ as version
 from . import exceptions
 from . import Remote
-
+from . import utils
 
 def _read_config():
     config = collections.defaultdict(lambda: None, {
@@ -20,6 +21,9 @@ def _read_config():
         "id": "",
         "method": "legacy",
         "timeout": 0,
+        "ip": "",
+        "mac": "",
+        "tvmac": ""
     })
 
     file_loaded = False
@@ -57,7 +61,7 @@ def _read_config():
             return config
 
         config.update(config_json)
-
+    
     return config
 
 
@@ -81,6 +85,9 @@ def main():
     parser.add_argument("--description", metavar="DESC",
                         help="remote control description")
     parser.add_argument("--id", help="remote control id")
+    parser.add_argument("--ip", help="remote control ip address")
+    parser.add_argument("--mac", help="remote control MAC address")
+    parser.add_argument("--tvmac", help="TV MAC Address for wakeonlan")
     parser.add_argument("--timeout", type=float,
                         help="socket timeout in seconds (0 = no timeout)")
     parser.add_argument("key", nargs="*",
@@ -105,6 +112,12 @@ def main():
     if not config["host"]:
         logging.error("Error: --host must be set")
         return
+
+    config["mac"] = config["mac"].upper().replace(":", "-")
+
+    if "KEY_POWERON" in args.key:
+        if utils.check_ping(config["host"]) == False:
+            utils.wakeonlan(config["tvmac"])
 
     try:
         with Remote(config) as remote:
